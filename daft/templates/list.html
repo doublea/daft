@@ -1,0 +1,11 @@
+<!doctype html>
+<head>
+<title>Daft Listings</title>
+</head>
+<body>
+    <ul id="list">
+    {% for l in listings %}
+        <li><a href="https://www.daft.ie{{ l.url }}">{{ l.address }}</a>: <b>{{ l.price }}</b> Location: {{ l.location.x }}, {{ l.location.y }}</li>
+    {% endfor %}
+    </ul>
+</body>
