@@ -261,3 +261,5 @@ __pycache__/
 *.pyc
 /daft/env
 /db.sqlite
+/daft/db.sqlite
+/daft/key
