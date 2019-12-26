@@ -1,0 +1,33 @@
+<!doctype html>
+<head>
+  <title>Daft Listings</title>
+  <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='datatables.min.css') }}">
+  <script type="text/javascript" charset="utf8" src="{{ url_for('static', filename='jQuery-3.3.1/jquery-3.3.1.min.js') }}"></script>
+  <script type="text/javascript" charset="utf8" src="{{ url_for('static', filename='datatables.min.js') }}"></script>
+  <script type="text/javascript" class="init">
+    $(document).ready(function() {
+            $('#listings').DataTable();
+    } );
+  </script>
+</head>
+<body>
+  <table id="listings" class="display">
+    <thead>
+      <th>Address</th>
+      <th>Price</th>
+      <th>Area</th>
+      <th>Beds/Baths</th>
+      <th>Location</th>
+    </thead>
+    <tbody>
+      {% for l in listings %}
+      <tr>
+        <td><a href="https://www.daft.ie{{ l.url}}">{{ l.address }}</a></td>
+        <td>{{ l.price }}</td>
+        <td>{{ l.area }}</td>
+        <td>{{ l.beds }}/{{ l.bathrooms }}</td>
+        <td>{{ l.location }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+</body>
