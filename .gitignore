@@ -263,3 +263,4 @@ __pycache__/
 /db.sqlite
 /daft/db.sqlite
 /daft/key
+/daft/destination

@@ -6,7 +6,7 @@
   <script type="text/javascript" charset="utf8" src="{{ url_for('static', filename='datatables.min.js') }}"></script>
   <script type="text/javascript" class="init">
     $(document).ready(function() {
-            $('#listings').DataTable();
+      $('#listings').DataTable({ pageLength: 100 });
     } );
   </script>
 </head>
@@ -17,7 +17,8 @@
       <th>Price</th>
       <th>Area</th>
       <th>Beds/Baths</th>
-      <th>Location</th>
+      <th>Commute time</th>
+      <th>Euro per commute-sec</th>
     </thead>
     <tbody>
       {% for l in listings %}
@@ -26,7 +27,16 @@
         <td>{{ l.price }}</td>
         <td>{{ l.area }}</td>
         <td>{{ l.beds }}/{{ l.bathrooms }}</td>
-        <td>{{ l.location }}</td>
+        {% if l.url in distances %}
+        <td data-order="{{ distances[l.url].duration_secs}}">{{ distances[l.url].duration_text }}</td>
+          {% if l.price %}
+          <td>{{ l.price / distances[l.url].duration_secs }}</td>
+          {% else %}
+          <td></td>
+          {% endif %}
+        {% else %}
+        <td></td><td></td>
+        {% endif %}
       </tr>
       {% endfor %}
     </tbody>

@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import asyncio
 import bs4
@@ -73,7 +74,7 @@ class ListingParser:
             if 'var trackingParam' in s.string:
                 m = LOCATION_RE.search(s.string)
                 if m:
-                    return daft_types.Location(float(m.group(1)), float(m.group(2)))
+                    return daft_types.Location(float(m.group(2)), float(m.group(1)))
         return None
 
     @property
@@ -125,29 +126,31 @@ def GetLinks(content):
     return [a['href'] for a in links]
 
 async def load_into_table(conn, listing):
-    fields = dataclasses.fields(daft_types.Listing)
-    stmt = "INSERT OR IGNORE INTO listings(%s) values (%s);" % (
-        ','.join(f.name for f in fields),
-        ','.join(['?'] * len(fields)))
     with conn:
-        conn.execute(stmt, tuple([getattr(listing, f.name) for f in fields]))
+        conn.execute(listing.insert_stmt(), listing.astuple())
 
 async def process_listing_url(url, conn):
     l = await parse_listing(url)
     await load_into_table(conn, l)
 
 async def main():
-    conn = daft_types.get_db_connection()
+    conn = daft_types.get_db_connection(for_type=daft_types.Listing)
     conn.execute(daft_types.Listing.create_table_statement())
+    existing_listings = {l.url for l in
+                         conn.execute('SELECT * FROM listing;').fetchall()}
     tasks = []
+    offset = 0
     while True:
-        soup = await MakeRequest(LIST_URL + OFFSET_URL_TMPL % len(tasks))
-        l = GetLinks(soup)
-        print('Got %d links' % len(l))
-        if not l:
+        soup = await MakeRequest(LIST_URL + OFFSET_URL_TMPL % offset)
+        links = GetLinks(soup)
+        if not links:
             break
-        tasks.extend([asyncio.create_task(process_listing_url(link, conn)) for link in l])
-    await asyncio.wait(tasks)
+        offset += len(links)
+        links = [l for l in links if l not in existing_listings]
+        print('Got %d new links' % len(links))
+        tasks.extend([asyncio.create_task(process_listing_url(link, conn)) for link in links])
+    if tasks:
+        await asyncio.wait(tasks)
     conn.close()
 
 if __name__ == '__main__':
