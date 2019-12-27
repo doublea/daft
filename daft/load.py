@@ -17,7 +17,7 @@ logging.basicConfig(level=logging.INFO)
 UA = 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0'
 BASE_URL = 'https://www.daft.ie'
 
-# Dublin City, detached house, min 3 bed, min 3 bathroom
+# Dublin City, detached house, min 3 bed, min 2 bathroom
 LIST_URL = '/dublin-city/houses-for-sale/?s%5Bmnb%5D=3&s%5Bmnbt%5D=2&s%5Badvanced%5D=1&s%5Bhouse_type%5D%5B0%5D=detached&searchSource=sale'
 OFFSET_URL_TMPL = '&offset=%d'
 LOCATION_RE = re.compile('"longitude":(-?[0-9.]+),"latitude":(-?[0-9.]+)', re.UNICODE)
