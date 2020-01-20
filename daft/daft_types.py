@@ -51,11 +51,11 @@ class SQLMappingMixin:
       for row in conn.execute('pragma table_info("%s")' % cls.tablename()):
         if row[1] in new_fields:
           del new_fields[row[1]]
-        if new_fields:
-          logging.info('Adding new fields to table "%s": %s',
-                       cls.tablename(), ', '.join(new_fields.keys()))
-        for f in new_fields.values():
-          conn.execute('ALTER TABLE %s ADD COLUMN %s %s' % (cls.tablename(), f.name, f.metadata['sqlite_type']))
+      if new_fields:
+        logging.info('Adding new fields to table "%s": %s',
+                      cls.tablename(), ', '.join(new_fields.keys()))
+      for f in new_fields.values():
+        conn.execute('ALTER TABLE %s ADD COLUMN %s %s' % (cls.tablename(), f.name, f.metadata['sqlite_type']))
 
   @classmethod
   def create_table_statement(cls):
