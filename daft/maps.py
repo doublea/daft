@@ -5,6 +5,7 @@ import googlemaps
 import logging
 import sqlite3
 
+import config
 import daft_types
 
 logging.basicConfig(level=logging.INFO)
@@ -79,8 +80,8 @@ def load_distances_to_destination(client, mode, destination):
 
 def main():
     mode='transit'
-    client = googlemaps.Client(key=open('key').read().strip())
-    x, y = open('destination').read().strip().split(',')
+    client = googlemaps.Client(config.GMAPS_API_KEY)
+    x, y = config.COMMUTE_DESTINATION.split(',')
     destination = daft_types.Location(x=float(x), y=float(y))
     load_distances_to_destination(client, mode, destination)
 

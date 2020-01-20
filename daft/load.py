@@ -3,6 +3,7 @@
 import asyncio
 import bs4
 import dataclasses
+import datetime
 import functools
 import logging
 import re
@@ -10,6 +11,7 @@ import requests
 import sqlite3
 import sys
 
+import config
 import daft_types
 
 logging.basicConfig(level=logging.INFO)
@@ -17,13 +19,14 @@ logging.basicConfig(level=logging.INFO)
 UA = 'Mozilla/5.0 (Windows NT 6.0; WOW64; rv:24.0) Gecko/20100101 Firefox/24.0'
 BASE_URL = 'https://www.daft.ie'
 
-# Dublin City, detached house, min 3 bed, min 2 bathroom
-LIST_URL = '/dublin-city/houses-for-sale/?s%5Bmnb%5D=3&s%5Bmnbt%5D=2&s%5Badvanced%5D=1&s%5Bhouse_type%5D%5B0%5D=detached&searchSource=sale'
 OFFSET_URL_TMPL = '&offset=%d'
-LOCATION_RE = re.compile('"longitude":(-?[0-9.]+),"latitude":(-?[0-9.]+)', re.UNICODE)
+LOCATION_RE = re.compile(
+    '"longitude":(-?[0-9.]+),"latitude":(-?[0-9.]+)', re.UNICODE)
 AREA_RE = re.compile(r'([0-9.]+).*(ft|m)?', re.I)
 BEDS_RE = re.compile('Number of beds is ([0-9]+)')
 BATHS_RE = re.compile('Number of bathroom is ([0-9]+)')
+ADDED_RE = re.compile(
+    '"published_date":"([0-9]{4})-([0-9]{2})-([0-9]{2})"', re.UNICODE)
 
 def run_in_executor(f):
     @functools.wraps(f)
@@ -37,7 +40,8 @@ def parsePrice(price_str):
     if not price_str:
         return None
     try:
-        return int(price_str.translate({'$': None, 0x20ac: None, '.': None, 44: None}))
+        return int(price_str.translate(
+            {'$': None, 0x20ac: None, '.': None, 44: None}))
     except ValueError:
         return None
 
@@ -51,31 +55,51 @@ def parseArea(area_str):
     return a
 
 class ListingParser:
-    def __init__(self, url, content):
+    def __init__(self, url: str, content: str, first_seen: datetime.datetime,
+                 scraped_on: datetime.datetime):
         self.url = url
         self.content = content
+        self.first_seen = first_seen
+        self.scraped_on = scraped_on
         self.doc = bs4.BeautifulSoup(content, 'lxml')
 
     @property
     def price(self):
-        price_str = self.doc.find('strong', {'class': 'PropertyInformationCommonStyles__costAmountCopy'}).string
-        return parsePrice(price_str)
+        price_str = self.doc.find(
+            'strong',
+            {'class': 'PropertyInformationCommonStyles__costAmountCopy'})
+        return parsePrice(price_str.string)
 
     @property
     def address(self):
-        return self.doc.find('h1', {'class': 'PropertyMainInformation__address'}).text
-
+        return self.doc.find(
+            'h1', {'class': 'PropertyMainInformation__address'}).text
     @property
-    def location(self):
+    def tracking_params(self):
         scripts = self.doc.find_all('script')
         for s in scripts:
             if s.string is None:
                 continue
             if 'var trackingParam' in s.string:
-                m = LOCATION_RE.search(s.string)
-                if m:
-                    return daft_types.Location(float(m.group(2)), float(m.group(1)))
-        return None
+                return s.string
+
+    @property
+    def location(self):
+        params = self.tracking_params
+        if params:
+            m = LOCATION_RE.search(params)
+            if m:
+                return daft_types.Location(
+                    float(m.group(2)), float(m.group(1)))
+
+    @property
+    def added(self):
+        params = self.tracking_params
+        if params:
+            m = ADDED_RE.search(params)
+            if m:
+                return datetime.date(
+                    int(m.group(1)), int(m.group(2)), int(m.group(3)))
 
     @property
     def beds(self):
@@ -101,16 +125,12 @@ class ListingParser:
         return parseArea(span.next_sibling.string)
 
     def MakeListing(self):
-        return daft_types.Listing(url=self.url, doc=self.content, price=self.price,
-                       address=self.address, location=self.location, beds=self.beds,
-                       bathrooms=self.baths, area=self.area)
-
-async def parse_listing(url):
-    logging.info('Started parsing %s', url)
-    ret = ListingParser(url, await MakeRequest(url)).MakeListing()
-    logging.info('Finished parsing %s', url)
-    return ret
-
+        return daft_types.Listing(
+            url=self.url, doc=self.content, price=self.price,
+            address=self.address, location=self.location, beds=self.beds,
+            bathrooms=self.baths, area=self.area, added=self.added,
+            scraped_on=datetime.datetime.now(datetime.timezone.utc),
+            first_seen=self.first_seen)
 
 @run_in_executor
 def MakeRequest(url: str) -> bs4.BeautifulSoup:
@@ -129,28 +149,43 @@ async def load_into_table(conn, listing):
     with conn:
         conn.execute(listing.insert_stmt(), listing.astuple())
 
-async def process_listing_url(url, conn):
-    l = await parse_listing(url)
+async def process_listing_url(url, existing_listings, now, conn):
+    logging.info('Started parsing %s', url)
+    first_seen = now
+    if url in existing_listings:
+        stored_listing = existing_listings[url]
+        content = stored_listing.doc
+        if stored_listing.first_seen:
+            first_seen = stored_listing.first_seen
+    else:
+        content = await MakeRequest(url)
+    l = ListingParser(url, content, first_seen, now).MakeListing()
     await load_into_table(conn, l)
+    logging.info('Finished parsing %s', url)
+    return url
 
 async def main():
+    now = datetime.datetime.now(datetime.timezone.utc)
+    with daft_types.get_db_connection() as conn:
+        daft_types.Listing.create_or_alter_table(conn)
     conn = daft_types.get_db_connection(for_type=daft_types.Listing)
-    conn.execute(daft_types.Listing.create_table_statement())
-    existing_listings = {l.url for l in
+    existing_listings = {l.url: l for l in
                          conn.execute('SELECT * FROM listing;').fetchall()}
     tasks = []
     offset = 0
     while True:
-        soup = await MakeRequest(LIST_URL + OFFSET_URL_TMPL % offset)
+        soup = await MakeRequest(config.DAFT_SEARCH + OFFSET_URL_TMPL % offset)
         links = GetLinks(soup)
         if not links:
             break
         offset += len(links)
-        links = [l for l in links if l not in existing_listings]
         print('Got %d new links' % len(links))
-        tasks.extend([asyncio.create_task(process_listing_url(link, conn)) for link in links])
+        for link in links:
+            tasks.append(asyncio.create_task(
+                process_listing_url(link, existing_listings, now, conn)))
     if tasks:
         await asyncio.wait(tasks)
+
     conn.close()
 
 if __name__ == '__main__':

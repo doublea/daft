@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <head>
   <title>Daft Listings</title>
   <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='datatables.min.css') }}">
@@ -16,27 +16,33 @@
       <th>Address</th>
       <th>Price</th>
       <th>Area</th>
+      <th>Euro/m²</th>
       <th>Beds/Baths</th>
       <th>Commute time</th>
-      <th>Euro per commute-sec</th>
+      <th>m²/(Euro-Thousands * Commute-Hour)</th>
+      <th>Added</th>
+      <th>First seen</th>
     </thead>
     <tbody>
       {% for l in listings %}
       <tr>
-        <td><a href="https://www.daft.ie{{ l.url}}">{{ l.address }}</a></td>
-        <td>{{ l.price }}</td>
+        <td><a href="https://www.daft.ie{{ l.url}}" target="_blank">{{ l.address }}</a></td>
+        <td>{% if l.price %}{{ '{:,}'.format(l.price) }}{% endif %}</td>
         <td>{{ l.area }}</td>
+        <td>
+            {% if l.price and l.area %}
+            {{ (l.price / l.area)|int }}
+            {% endif %}
+        </td>
         <td>{{ l.beds }}/{{ l.bathrooms }}</td>
         {% if l.url in distances %}
         <td data-order="{{ distances[l.url].duration_secs}}">{{ distances[l.url].duration_text }}</td>
-          {% if l.price %}
-          <td>{{ l.price / distances[l.url].duration_secs }}</td>
-          {% else %}
-          <td></td>
-          {% endif %}
         {% else %}
-        <td></td><td></td>
+        <td></td>
         {% endif %}
+        <td>{% if l.price and l.url in distances and l.area %}{{ l.area/(l.price * distances[l.url].duration_secs / 3600 / 1000)}}{% endif %}</td>
+        <td>{{ l.added }}</td>
+        <td>{{ l.first_seen }}</td>
       </tr>
       {% endfor %}
     </tbody>

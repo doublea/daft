@@ -27,8 +27,9 @@ def hello_world():
     get_db().row_factory = daft_types.Distance.row_factory
     distance = get_db().execute('SELECT * from distance;').fetchall()
     distances = {d.listing_url: d for d in distance}
-    return render_template('index.html', listings=listings, distances=distances)
+    return render_template(
+        'index.html', listings=listings, distances=distances)
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0')

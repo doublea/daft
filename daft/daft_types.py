@@ -1,5 +1,7 @@
 ﻿# -*- coding: utf-8 -*-
 import dataclasses
+import datetime
+import logging
 import sqlite3
 
 DATABASE = 'db.sqlite'
@@ -12,7 +14,7 @@ class Location:
 
     @staticmethod
     def adapter(location):
-        return '%f;%f' % (location.x, location.y)
+        return '%.7f;%.7f' % (location.x, location.y)
 
     @classmethod
     def converter(cls, s):
@@ -39,6 +41,21 @@ class SQLMappingMixin:
         return cls(**fields)
 
     @classmethod
+    def create_or_alter_table(cls, conn):
+        if conn.row_factory:
+            raise ValueError('Connection passed to create_or_alter_table must not have a row factory')
+        new_fields = {f.name: f for f in dataclasses.fields(cls)}
+        with conn:
+            conn.execute(cls.create_table_statement())
+            for row in conn.execute('pragma table_info("%s")' % cls.tablename()):
+                if row[1] in new_fields:
+                    del new_fields[row[1]]
+            if new_fields:
+                logging.info('Adding new fields to table "%s": %s', cls.tablename(), ', '.join(new_fields.keys()))
+            for f in new_fields.values():
+                conn.execute('ALTER TABLE %s ADD COLUMN %s %s' % (cls.tablename(), f.name, f.metadata['sqlite_type']))
+
+    @classmethod
     def create_table_statement(cls):
         cols = ', '.join(['%s %s' % (f.name, f.metadata['sqlite_type'])
                          for f in dataclasses.fields(cls)])
@@ -47,7 +64,7 @@ class SQLMappingMixin:
     @classmethod
     def insert_stmt(cls):
         fields = dataclasses.fields(cls)
-        return "INSERT OR IGNORE INTO %s(%s) values (%s);" % (
+        return "INSERT OR REPLACE INTO %s(%s) values (%s);" % (
             cls.tablename(),
             ','.join(f.name for f in fields),
             ','.join(['?'] * len(fields)))
@@ -69,6 +86,9 @@ class Listing(SQLMappingMixin):
     beds: int = sqltype('integer')
     bathrooms: int = sqltype('integer')
     area: int = sqltype('integer')
+    added: datetime.date = sqltype('date')
+    scraped_on: datetime.datetime = sqltype('datetime')
+    first_seen: datetime.datetime = sqltype('datetime')
 
 @dataclasses.dataclass(frozen=True)
 class Distance(SQLMappingMixin):
