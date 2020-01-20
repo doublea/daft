@@ -41,7 +41,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="daft_types.py" />
-    <Compile Include="load.py" />
+    <Compile Include="scrape.py" />
     <Compile Include="maps.py" />
     <Compile Include="shell.py" />
     <Compile Include="web.py" />
